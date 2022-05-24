@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np 
-
+import math
 from nltk.stem.snowball import SnowballStemmer
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
@@ -104,7 +104,7 @@ def clean_text(text, toke = False):
     return text
 
 
-def top_rec(title_of_movie, similarity_matrix, indices, df):
+def top_rec(title_of_movie, similarity_matrix, indices, df,n):
     """
     Given a cosine siilarity matrix and item to id mapping, this function returns the top 10 items with the highest similarity.
     
@@ -118,7 +118,7 @@ def top_rec(title_of_movie, similarity_matrix, indices, df):
     
     """
 
-    movie_indices = [i[0] for i in sorted(list(enumerate(similarity_matrix[indices[title_of_movie]])), key=lambda x: x[1], reverse=True)[1:11]]
+    movie_indices = [i[0] for i in sorted(list(enumerate(similarity_matrix[indices[title_of_movie]])), key=lambda x: x[1], reverse=True)[1:n]]
     
     top  = df['title'].iloc[movie_indices]
     return top
@@ -128,6 +128,107 @@ def top_rec(title_of_movie, similarity_matrix, indices, df):
 
 
 
+def top_rec_test(user, similarity_matrix, indices, df, rating_test, n):
+    
+    titles = rating_test[rating_test.userId == user].sort_values('rating', ascending = False).movieId.values[0:2]
+    
+    if len(titles) == 2:
+        title1 = df[df.movieId == titles[0]].title.values[0]
+        title2 = df[df.movieId == titles[1]].title.values[0]
+        
+        movie_indices1 = [i[0] for i in sorted(list(enumerate(similarity_matrix[indices[title1]])), key=lambda x: x[1], reverse=True)[1:int(n/2)+1]]
+
+        top1  = df[['title','movieId']].iloc[movie_indices1]
+
+
+        movie_indices2 = [i[0] for i in sorted(list(enumerate(similarity_matrix[indices[title2]])), key=lambda x: x[1], reverse=True)[1:math.ceil(n/2)+1]]
+
+        top2  = df[['title','movieId']].iloc[movie_indices2]
+
+        top = pd.concat([top1, top2])
+    
+    
+    else:
+        
+        title1 = df[df.movieId == titles[0]].title.values[0]
+
+        movie_indices1 = [i[0] for i in sorted(list(enumerate(similarity_matrix[indices[title1]])), key=lambda x: x[1], reverse=True)[1:n+1]]
+
+        top  = df[['title','movieId']].iloc[movie_indices1]
+
+
+    
+    return top
+
+def top_rec_user(userId, sim, k,n,df, user_movie, indexes ):
+    
+    # K is for how many users to average
+    # n is for how many movies to recommend
+    # indexes is user index to id
+    
+    user = indexes[indexes.userId == userId].index.values[0]
+    temp = user_movie
+    users_ord = [i[0] for i in sorted(list(enumerate(sim[user])), key=lambda x: x[1], reverse=True)[1:k]]
+    temp.iloc[users_ord].mean(axis = 0)
+    temp.reset_index(drop = True,inplace = True)
+    movie_indices = temp.iloc[users_ord].mean(axis = 0).sort_values(ascending = False).index[0:n].to_numpy().flatten()  
+    
+    return df.iloc[movie_indices]
+
+
+def evaluate(rating_test, n, test_type, df, sample_size = 200, rating = None, sim = None, user_matrix = None, user_movie = None, indexes = None, k = 10):
+    ##rating_test,rating, sim, n, test_type,df, user_matrix = None):
+    
+    if test_type == 'simple':
+        users = random_sample(rating_test.userId.unique(), sample_size)
+        hits = 0
+        for user in users:
+            preds = simple(user,df,rating,n).movieId
+            targets = rating_test[(rating_test.userId == user) & (rating_test.rating > 3.5)].movieId
+            hits = hits + targets[targets.isin(preds)].count()
+
+        return hits/len(users)
+    
+    if test_type == 'CB':     
+        users = random_sample(rating_test.userId.unique(), sample_size)
+        hits = 0
+        for user in users:
+            preds = top_rec_test(user, sim, pd.Series(df.index, index=df['title']), df, rating_test, n).movieId
+            targets = rating_test[(rating_test.userId == user) & (rating_test.rating > 3.5)].movieId
+            hits = hits + targets[targets.isin(preds)].count()
+        return hits/len(users)  
+            
+    if test_type == 'UB':  
+        
+        users = random_sample(rating_test.userId.unique(), sample_size)
+        hits = 0
+        for user in users:
+            preds = top_rec_user(user, sim, k,n,df, user_matrix, indexes).movieId
+            targets = rating_test[(rating_test.userId == user) & (rating_test.rating > 3.5)].movieId
+            hits = hits + targets[targets.isin(preds)].count() 
+        return hits/len(users)
+            
+    if test_type == 'Hybrid':
+        c = ['1st Max','2nd Max','3rd Max', '4th Max', '5th Max', '6th Max', '7th Max','8th Max', '9th Max','10th Max']
+        temp = (user_movie.apply(lambda x: pd.Series(x.nlargest(10).index, index=c), axis=1)
+            .reset_index())
+        
+        users = random_sample(rating_test.userId.unique(), sample_size)
+        hits = 0
+        for user in users:
+            preds = CB_CF_MEMORY_HYBRID_REC_test(temp, user, df, n).movieId
+            targets = rating_test[(rating_test.userId == user) & (rating_test.rating > 3.5)].movieId
+            hits = hits + targets[targets.isin(preds)].count()  
+            
+        return hits/len(users)
+
+
+############################################
+# Simple models
+############################################
+
+def simple(user,df,rating, n):
+    return df[~df.movieId.isin(rating[rating.userId == user].movieId )].sort_values('score', ascending=False).head(n)
 
 ############################################
 # Content Based models
@@ -203,5 +304,26 @@ def Doc2Word_embed(text_clean, text_token, vector_size = 300, window = 7,epochs 
 
 
 
-def Rating2Vec(user_item_pivot_df):
-    return cosine_similarity(user_item_pivot_df, user_item_pivot_df)
+def Rating2Vec(user_item):
+    return cosine_similarity(user_item, user_item)
+
+
+
+def CB_CF_MEMORY_HYBRID_REC(user_movie, user, df, n):
+    
+    c = ['1st Max','2nd Max','3rd Max', '4th Max', '5th Max', '6th Max', '7th Max','8th Max', '9th Max','10th Max']
+    temp = (user_movie.apply(lambda x: pd.Series(x.nlargest(10).index, index=c), axis=1)
+            .reset_index())
+
+    indx = temp[temp.userId == user][['1st Max','2nd Max','3rd Max',
+                                         '4th Max', '5th Max', '6th Max', '7th Max','8th Max', '9th Max','10th Max']].values[0]
+
+    return df[['title','movieId']].iloc[indx][0:n]
+
+
+def CB_CF_MEMORY_HYBRID_REC_test( top_matrix, user, df, n):
+
+    indx = top_matrix[top_matrix.userId == user][['1st Max','2nd Max','3rd Max',
+                                         '4th Max', '5th Max', '6th Max', '7th Max','8th Max', '9th Max','10th Max']].values[0]
+
+    return df[['title','movieId']].iloc[indx][0:n]
