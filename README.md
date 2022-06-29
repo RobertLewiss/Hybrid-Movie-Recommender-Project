@@ -1,13 +1,16 @@
 # Movie Recommender System
  Project on Recommender Systems - Implementing a Hybrid recommender 
 
-Initial Phase: Cleaned and prepared data. (Done)
+This project Explores various Movie recommender system methods, with the main aim to build a fully hybrid NN recommender.
 
-Second Phase: Content based Recommenders
-- Simple Model (Done)
-- TF-IDF Model (Done)
-- Word2Vec Model (Done)
-- LDA Model (Done)
+Methods include: Content based methods (TF-IDF Vectors, word embeddings), Collaborative filtering methods (models and memory based) and Hybrid methods.
 
-Hybrid CB - Combine the outputs of the four models.
+
+Contents:
+
+
+
+
+
+
 
