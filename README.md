@@ -7,8 +7,10 @@ Methods include: Content based methods (TF-IDF Vectors, word embeddings), Collab
 
 
 Contents:
-
-
+ - Hybrid_Recommender_System.ipynb: This is the Main Notebook where I go through each Recommender method and evaluate each.
+ - PreProcessing.ipynb: This notebook goes through the necessary preprocessing methods to clean the Movie data.
+ - Utils.py: These are Functions I created for the Hybrid_Recommender_System.ipynb, it includes the code for each algorithm and evaluation functions. It also has some visualisation and plotting functions.
+ - RecEDA.ipynb: Messy notebook where I explored some recommender systems.
 
 
 
